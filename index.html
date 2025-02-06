@@ -2,48 +2,76 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Last War: S3 Map</title>
+  <title>Season 3 Interactive Map</title>
+  <!-- Basic styling to replicate the color-coded grid from your screenshot -->
   <style>
-    /* BASIC STYLING */
     body {
-      font-family: Arial, sans-serif;
       margin: 20px;
-      background-color: #f3f3f3;
+      font-family: Arial, sans-serif;
+      background-color: #f4f4f4;
     }
-    h1 { text-align: center; }
-
+    h1 {
+      text-align: center;
+      margin-bottom: 10px;
+    }
+    /* The map container for a large grid (e.g., 12x12 or however big your data is) */
     #map-container {
       display: grid;
-      grid-template-columns: repeat(10, 1fr); /* 10 columns, adjust as needed */
+      /* ADJUST repeat(...) to match your widest column count if it's not 12 */
+      grid-template-columns: repeat(12, 1fr);
       gap: 5px;
-      max-width: 900px;
-      margin: 20px auto;
+      max-width: 1200px;
+      margin: 0 auto;
     }
     .tile {
-      background: #ddd;
       border: 1px solid #ccc;
       text-align: center;
+      padding: 10px;
       cursor: pointer;
       transition: transform 0.1s;
-      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      font-size: 0.85rem;
     }
     .tile:hover {
-      transform: scale(1.03);
+      transform: scale(1.02);
     }
-    /* POPUP OVERLAY */
+    /* Colors that match your screenshot’s squares */
+    .type-Village {
+      background-color: #c5b3fc; /* purple-ish */
+    }
+    .type-Farmland {
+      background-color: #b3fcb3; /* green-ish */
+    }
+    .type-Fortress {
+      background-color: #fcb3b3; /* red-ish */
+    }
+    .type-Other {
+      background-color: #ffe6b3; /* orange-ish */
+    }
+    .type-DragonStronghold {
+      background-color: #d8d8d8; /* grey or custom color if you want special ones */
+    }
+    /* Adjust or add more classes if your screenshot has more categories */
+    /* Popup overlay for editing a tile */
     #popup-overlay {
-      display: none; /* hidden by default */
       position: fixed;
       top: 0; left: 0; right: 0; bottom: 0;
-      background-color: rgba(0,0,0,0.5);
+      background: rgba(0,0,0,0.5);
+      display: none; /* hidden by default */
       justify-content: center;
       align-items: center;
     }
     .popup-content {
       background: #fff;
       padding: 20px;
-      border-radius: 5px;
+      border-radius: 6px;
       width: 300px;
+    }
+    .form-row {
+      margin-bottom: 10px;
     }
     label {
       display: inline-block;
@@ -52,16 +80,13 @@
     input, select, textarea {
       width: calc(100% - 90px);
     }
-    .form-row {
-      margin-bottom: 10px;
-    }
   </style>
 </head>
 <body>
-  <h1>Last War: Interactive Map</h1>
+  <h1>Season 3 - Alliance Map</h1>
   <div id="map-container"></div>
 
-  <!-- POPUP FOR EDITING A TILE -->
+  <!-- Popup for editing tile details -->
   <div id="popup-overlay">
     <div class="popup-content">
       <h2>Edit Tile</h2>
@@ -71,6 +96,7 @@
           <option value="Village">Village</option>
           <option value="Farmland">Farmland</option>
           <option value="Fortress">Fortress</option>
+          <option value="DragonStronghold">DragonStronghold</option>
           <option value="Other">Other</option>
         </select>
       </div>
@@ -83,7 +109,7 @@
         <input type="number" id="tile-level" min="1" />
       </div>
       <div class="form-row">
-        <label for="tile-notes">Notes:</label><br>
+        <label for="tile-notes">Notes:</label><br/>
         <textarea id="tile-notes" rows="3"></textarea>
       </div>
       <button id="save-button">Save</button>
@@ -91,114 +117,107 @@
     </div>
   </div>
 
-  <!-- JAVASCRIPT -->
   <script type="module">
-    // 1) Import the Supabase client from a CDN
-    import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+    import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-    // 2) Configure your Supabase project
-    const SUPABASE_URL = 'https://klgyrhguzmzbgbkwtjdd.supabase.co';
-    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtsZ3lyaGd1em16Ymdia3d0amRkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mzg4NzkwNjcsImV4cCI6MjA1NDQ1NTA2N30.KrFQysxK0l_ZqyjdCJsN1Q0PEnLE9QXQTdIJb8a9UO8';
+    // 1) REPLACE THESE with your real Supabase project URL and anon key.
+    const SUPABASE_URL = "https://klgyrhguzmzbgbkwtjdd.supabase.co";
+    const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtsZ3lyaGd1em16Ymdia3d0amRkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mzg4NzkwNjcsImV4cCI6MjA1NDQ1NTA2N30.KrFQysxK0l_ZqyjdCJsN1Q0PEnLE9QXQTdIJb8a9UO8";
     const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
-    // 3) DOM elements
-    const mapContainer = document.getElementById('map-container');
-    const popupOverlay = document.getElementById('popup-overlay');
-    const tileTypeInput = document.getElementById('tile-type');
-    const tileOwnerInput = document.getElementById('tile-owner');
-    const tileLevelInput = document.getElementById('tile-level');
-    const tileNotesInput = document.getElementById('tile-notes');
+    // 2) Grab references to DOM elements
+    const mapContainer = document.getElementById("map-container");
+    const popupOverlay = document.getElementById("popup-overlay");
+    const tileTypeInput = document.getElementById("tile-type");
+    const tileOwnerInput = document.getElementById("tile-owner");
+    const tileLevelInput = document.getElementById("tile-level");
+    const tileNotesInput = document.getElementById("tile-notes");
+
+    const saveButton = document.getElementById("save-button");
+    const cancelButton = document.getElementById("cancel-button");
 
     let tilesData = [];
     let currentTile = null;
 
-    // 4) Fetch tiles on page load
-    main();
+    // 3) MAIN: fetch tiles from supabase, then render them
     async function main() {
-      await fetchTiles();  // get from supabase
-      renderMap();         // show them on screen
-    }
-
-    async function fetchTiles() {
+      // Get all tiles (assuming row/col/tile_type/owner/level/notes exist)
       const { data, error } = await supabase
-        .from('tiles')
-        .select('*')
-        // .order('row', { ascending: true })
-        // .order('col', { ascending: true });
-        // Optional: if you want them sorted by row/col
+        .from("tiles")
+        .select("*")
+        .order("row", { ascending: true })
+        .order("col", { ascending: true });
 
       if (error) {
-        console.error('Error fetching tiles:', error);
+        console.error("Error fetching tiles:", error);
         return;
       }
+
       tilesData = data;
-      console.log('Tiles loaded:', tilesData);
+      renderMap();
     }
 
+    // 4) Render the map as a grid
     function renderMap() {
-      mapContainer.innerHTML = '';
-      tilesData.forEach(tile => {
-        const tileDiv = document.createElement('div');
-        tileDiv.classList.add('tile');
-        tileDiv.style.background = colorByType(tile.tile_type);
+      mapContainer.innerHTML = "";
+      tilesData.forEach((tile) => {
+        const tileDiv = document.createElement("div");
+        tileDiv.classList.add("tile");
 
+        // color by tile_type (apply a class like .type-Village, etc.)
+        tileDiv.classList.add(`type-${tile.tile_type || "Other"}`);
+
+        // Show info inside the square
+        // Example format: "R1 C1 / Village / Lvl 1 / Owner: ABC"
         tileDiv.innerHTML = `
-          <strong>R${tile.row}, C${tile.col}</strong><br>
-          ${tile.tile_type}<br>
-          ${tile.owner || 'No owner'}<br>
-          Lvl ${tile.level || 'N/A'}
+          <strong>R${tile.row}, C${tile.col}</strong><br/>
+          ${tile.tile_type || "Other"}<br/>
+          Owner: ${tile.owner || "None"}<br/>
+          Lvl: ${tile.level || 1}
         `;
 
-        // On click, open the popup
-        tileDiv.addEventListener('click', () => openPopup(tile));
+        tileDiv.addEventListener("click", () => openPopup(tile));
         mapContainer.appendChild(tileDiv);
       });
     }
 
-    function colorByType(type) {
-      switch (type) {
-        case 'Village':  return '#c5b3fc';
-        case 'Farmland': return '#b3fcb3';
-        case 'Fortress': return '#fcb3b3';
-        case 'Other':    return '#ffe6b3';
-        default:         return '#ddd';
-      }
-    }
-
+    // 5) Open the pop-up to edit a tile
     function openPopup(tile) {
       currentTile = tile;
-      tileTypeInput.value = tile.tile_type || 'Village';
-      tileOwnerInput.value = tile.owner || '';
-      tileLevelInput.value = tile.level || 1;
-      tileNotesInput.value = tile.notes || '';
 
-      popupOverlay.style.display = 'flex';
+      tileTypeInput.value = tile.tile_type || "Other";
+      tileOwnerInput.value = tile.owner || "";
+      tileLevelInput.value = tile.level || 1;
+      tileNotesInput.value = tile.notes || "";
+
+      popupOverlay.style.display = "flex";
     }
 
+    // 6) Save the tile changes back to Supabase
     async function saveTile() {
       if (!currentTile) return;
 
-      const newData = {
+      const updatedData = {
         tile_type: tileTypeInput.value,
         owner: tileOwnerInput.value,
         level: parseInt(tileLevelInput.value, 10),
         notes: tileNotesInput.value
       };
 
-      // UPDATE in supabase
+      // Update in supabase
       const { data, error } = await supabase
-        .from('tiles')
-        .update(newData)
-        .eq('id', currentTile.id)
+        .from("tiles")
+        .update(updatedData)
+        .eq("id", currentTile.id)
         .select();
 
       if (error) {
-        console.error('Error updating tile:', error);
+        console.error("Error updating tile:", error);
       } else {
-        // Update our local array so we don't have to refetch everything
-        const i = tilesData.findIndex(t => t.id === currentTile.id);
-        if (i !== -1) {
-          tilesData[i] = { ...tilesData[i], ...newData };
+        // update local data so we don't need a full refetch
+        const idx = tilesData.findIndex(t => t.id === currentTile.id);
+        if (idx !== -1) {
+          tilesData[idx] = { ...tilesData[idx], ...updatedData };
         }
         renderMap();
       }
@@ -207,14 +226,16 @@
     }
 
     function closePopup() {
-      popupOverlay.style.display = 'none';
+      popupOverlay.style.display = "none";
       currentTile = null;
     }
 
-    // Pop-up buttons
-    document.getElementById('save-button').addEventListener('click', saveTile);
-    document.getElementById('cancel-button').addEventListener('click', closePopup);
+    // 7) Hook up the popup buttons
+    saveButton.addEventListener("click", saveTile);
+    cancelButton.addEventListener("click", closePopup);
 
+    // 8) Initialize
+    main();
   </script>
 </body>
 </html>
