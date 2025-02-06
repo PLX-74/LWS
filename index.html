@@ -3,19 +3,18 @@
 <head>
   <meta charset="UTF-8" />
   <title>Last War: S3 Map</title>
-  
-  <!-- Basic styling or external CSS links here -->
   <style>
-    /* Example CSS for your map container, tiles, etc. */
+    /* BASIC STYLING */
     body {
       font-family: Arial, sans-serif;
       margin: 20px;
       background-color: #f3f3f3;
     }
+    h1 { text-align: center; }
+
     #map-container {
-      /* for example, a 10x10 grid */
       display: grid;
-      grid-template-columns: repeat(10, 1fr);
+      grid-template-columns: repeat(10, 1fr); /* 10 columns, adjust as needed */
       gap: 5px;
       max-width: 900px;
       margin: 20px auto;
@@ -24,62 +23,198 @@
       background: #ddd;
       border: 1px solid #ccc;
       text-align: center;
-      padding: 10px;
       cursor: pointer;
+      transition: transform 0.1s;
+      padding: 10px;
+    }
+    .tile:hover {
+      transform: scale(1.03);
+    }
+    /* POPUP OVERLAY */
+    #popup-overlay {
+      display: none; /* hidden by default */
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background-color: rgba(0,0,0,0.5);
+      justify-content: center;
+      align-items: center;
+    }
+    .popup-content {
+      background: #fff;
+      padding: 20px;
+      border-radius: 5px;
+      width: 300px;
+    }
+    label {
+      display: inline-block;
+      width: 80px;
+    }
+    input, select, textarea {
+      width: calc(100% - 90px);
+    }
+    .form-row {
+      margin-bottom: 10px;
     }
   </style>
 </head>
 <body>
   <h1>Last War: Interactive Map</h1>
-  
-  <!-- A container to hold the tiles -->
   <div id="map-container"></div>
 
-  <!-- Optional pop-up or modals go here -->
+  <!-- POPUP FOR EDITING A TILE -->
+  <div id="popup-overlay">
+    <div class="popup-content">
+      <h2>Edit Tile</h2>
+      <div class="form-row">
+        <label for="tile-type">Type:</label>
+        <select id="tile-type">
+          <option value="Village">Village</option>
+          <option value="Farmland">Farmland</option>
+          <option value="Fortress">Fortress</option>
+          <option value="Other">Other</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <label for="tile-owner">Owner:</label>
+        <input type="text" id="tile-owner" />
+      </div>
+      <div class="form-row">
+        <label for="tile-level">Level:</label>
+        <input type="number" id="tile-level" min="1" />
+      </div>
+      <div class="form-row">
+        <label for="tile-notes">Notes:</label><br>
+        <textarea id="tile-notes" rows="3"></textarea>
+      </div>
+      <button id="save-button">Save</button>
+      <button id="cancel-button">Cancel</button>
+    </div>
+  </div>
 
-  <!-- Your Supabase / JavaScript code -->
+  <!-- JAVASCRIPT -->
   <script type="module">
+    // 1) Import the Supabase client from a CDN
     import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
+    // 2) Configure your Supabase project
     const SUPABASE_URL = 'https://klgyrhguzmzbgbkwtjdd.supabase.co';
     const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtsZ3lyaGd1em16Ymdia3d0amRkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mzg4NzkwNjcsImV4cCI6MjA1NDQ1NTA2N30.KrFQysxK0l_ZqyjdCJsN1Q0PEnLE9QXQTdIJb8a9UO8';
-
     const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
-    // Example code to fetch tiles and display them
+    // 3) DOM elements
+    const mapContainer = document.getElementById('map-container');
+    const popupOverlay = document.getElementById('popup-overlay');
+    const tileTypeInput = document.getElementById('tile-type');
+    const tileOwnerInput = document.getElementById('tile-owner');
+    const tileLevelInput = document.getElementById('tile-level');
+    const tileNotesInput = document.getElementById('tile-notes');
+
+    let tilesData = [];
+    let currentTile = null;
+
+    // 4) Fetch tiles on page load
+    main();
     async function main() {
+      await fetchTiles();  // get from supabase
+      renderMap();         // show them on screen
+    }
+
+    async function fetchTiles() {
       const { data, error } = await supabase
         .from('tiles')
-        .select('*');
+        .select('*')
+        // .order('row', { ascending: true })
+        // .order('col', { ascending: true });
+        // Optional: if you want them sorted by row/col
 
       if (error) {
         console.error('Error fetching tiles:', error);
         return;
       }
-
-      renderTiles(data);
+      tilesData = data;
+      console.log('Tiles loaded:', tilesData);
     }
 
-    function renderTiles(tiles) {
-      const mapContainer = document.getElementById('map-container');
+    function renderMap() {
       mapContainer.innerHTML = '';
-
-      tiles.forEach(tile => {
+      tilesData.forEach(tile => {
         const tileDiv = document.createElement('div');
         tileDiv.classList.add('tile');
-        
-        // Simple tile content
-        tileDiv.textContent = `Row: ${tile.row}, Col: ${tile.col}, Type: ${tile.tile_type}`;
-        
-        // Add any click event if needed
-        // tileDiv.addEventListener('click', () => { /* open pop-up, etc. */ });
+        tileDiv.style.background = colorByType(tile.tile_type);
 
+        tileDiv.innerHTML = `
+          <strong>R${tile.row}, C${tile.col}</strong><br>
+          ${tile.tile_type}<br>
+          ${tile.owner || 'No owner'}<br>
+          Lvl ${tile.level || 'N/A'}
+        `;
+
+        // On click, open the popup
+        tileDiv.addEventListener('click', () => openPopup(tile));
         mapContainer.appendChild(tileDiv);
       });
     }
 
-    // Run main on page load
-    main();
+    function colorByType(type) {
+      switch (type) {
+        case 'Village':  return '#c5b3fc';
+        case 'Farmland': return '#b3fcb3';
+        case 'Fortress': return '#fcb3b3';
+        case 'Other':    return '#ffe6b3';
+        default:         return '#ddd';
+      }
+    }
+
+    function openPopup(tile) {
+      currentTile = tile;
+      tileTypeInput.value = tile.tile_type || 'Village';
+      tileOwnerInput.value = tile.owner || '';
+      tileLevelInput.value = tile.level || 1;
+      tileNotesInput.value = tile.notes || '';
+
+      popupOverlay.style.display = 'flex';
+    }
+
+    async function saveTile() {
+      if (!currentTile) return;
+
+      const newData = {
+        tile_type: tileTypeInput.value,
+        owner: tileOwnerInput.value,
+        level: parseInt(tileLevelInput.value, 10),
+        notes: tileNotesInput.value
+      };
+
+      // UPDATE in supabase
+      const { data, error } = await supabase
+        .from('tiles')
+        .update(newData)
+        .eq('id', currentTile.id)
+        .select();
+
+      if (error) {
+        console.error('Error updating tile:', error);
+      } else {
+        // Update our local array so we don't have to refetch everything
+        const i = tilesData.findIndex(t => t.id === currentTile.id);
+        if (i !== -1) {
+          tilesData[i] = { ...tilesData[i], ...newData };
+        }
+        renderMap();
+      }
+
+      closePopup();
+    }
+
+    function closePopup() {
+      popupOverlay.style.display = 'none';
+      currentTile = null;
+    }
+
+    // Pop-up buttons
+    document.getElementById('save-button').addEventListener('click', saveTile);
+    document.getElementById('cancel-button').addEventListener('click', closePopup);
+
   </script>
 </body>
 </html>
